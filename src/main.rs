@@ -15,6 +15,7 @@ enum GameState {
     Splash,
     Game,
     StartMenu,
+    Won,
 }
 
 #[derive(Resource)]
@@ -35,6 +36,7 @@ mod hud;
 mod level;
 mod splash;
 mod start_menu;
+mod won;
 
 fn main() {
     App::new()

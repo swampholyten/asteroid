@@ -4,7 +4,7 @@ use avian2d::{
 };
 use bevy::prelude::*;
 use bevy_enhanced_input::{
-    events::Fired,
+    events::{Completed, Fired},
     input_action,
     prelude::{Actions, InputAction, InputContext, InputContextAppExt},
     preset::Bidirectional,
@@ -32,13 +32,14 @@ struct ShipController;
 #[input_action(output = f32)]
 struct Rotate;
 
+#[derive(Debug, InputAction)]
+#[input_action(output = bool)]
+struct Thrust;
+
 pub fn game_plugin(app: &mut App) {
     app.add_input_context::<ShipController>()
         .add_systems(OnEnter(GameState::Game), display_level)
-        .add_systems(
-            Update,
-            (collision, tick_explotion).run_if(in_state(GameState::Game)),
-        );
+        .add_systems(Update, (tick_explotion).run_if(in_state(GameState::Game)));
 }
 
 fn display_level(
@@ -182,21 +183,25 @@ fn spawn_player(commands: &mut Commands, game_assets: &GameAssets, position: Vec
         negative: KeyCode::KeyD,
     });
 
-    commands.spawn((
-        Sprite::from_image(game_assets.player_ship.clone()),
-        RigidBody::Dynamic,
-        Collider::circle(40.0),
-        AngularDamping(5.0),
-        Player,
-        Transform::from_translation(position.extend(0.0)),
-        StateScoped(GameState::Game),
-        children![(
-            Sprite::from_image(game_assets.jets.clone()),
-            Transform::from_xyz(0.0, -40.0, -1.0),
-            Visibility::Hidden
-        )],
-        actions,
-    ));
+    commands
+        .spawn((
+            Sprite::from_image(game_assets.player_ship.clone()),
+            RigidBody::Dynamic,
+            Collider::circle(40.0),
+            AngularDamping(5.0),
+            Player,
+            Transform::from_translation(position.extend(0.0)),
+            StateScoped(GameState::Game),
+            children![(
+                Sprite::from_image(game_assets.jets.clone()),
+                Transform::from_xyz(0.0, -40.0, -1.0),
+                Visibility::Hidden
+            )],
+            actions,
+        ))
+        .observe(rotate)
+        .observe(thrust)
+        .observe(thrust_stop);
 }
 
 fn rotate(
@@ -210,6 +215,36 @@ fn rotate(
     let mut angular_velocity = player.get_mut(trigger.target())?;
 
     angular_velocity.0 += trigger.value.signum() * rate;
+
+    Ok(())
+}
+
+fn thrust(
+    trigger: Trigger<Fired<Thrust>>,
+    mut player: Query<(&Transform, &mut LinearVelocity, &Children)>,
+    mut visibility: Query<&mut Visibility>,
+) -> Result {
+    let (transform, mut linear_velocity, children) = player.get_mut(trigger.target())?;
+
+    linear_velocity.0 += transform.local_y().xy() * 2.0;
+    linear_velocity.0 = linear_velocity.0.clamp_length_max(200.0);
+    visibility
+        .get_mut(children[0])?
+        .set_if_neq(Visibility::Visible);
+
+    Ok(())
+}
+
+fn thrust_stop(
+    trigger: Trigger<Completed<Thrust>>,
+    player: Query<&Children>,
+    mut visibility: Query<&mut Visibility>,
+) -> Result {
+    let children = player.get(trigger.target())?;
+
+    visibility
+        .get_mut(children[0])?
+        .set_if_neq(Visibility::Hidden);
 
     Ok(())
 }
