@@ -1,6 +1,7 @@
 use avian2d::{PhysicsPlugins, prelude::Gravity};
 use bevy::prelude::*;
 use game::game_plugin;
+use hud::hud_plugin;
 use level::level_loader_plugin;
 use splash::splash_plugin;
 use start_menu::menu_plugin;
@@ -29,6 +30,7 @@ pub struct LoadedLevel {
 }
 
 mod game;
+mod hud;
 mod level;
 mod splash;
 mod start_menu;
@@ -46,6 +48,12 @@ fn main() {
         .enable_state_scoped_entities::<GameState>()
         .add_plugins(PhysicsPlugins::default())
         .insert_resource(Gravity::ZERO)
-        .add_plugins((splash_plugin, menu_plugin, game_plugin, level_loader_plugin))
+        .add_plugins((
+            splash_plugin,
+            menu_plugin,
+            game_plugin,
+            level_loader_plugin,
+            hud_plugin,
+        ))
         .run();
 }

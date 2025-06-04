@@ -17,7 +17,7 @@ pub struct Asteroid;
 struct Explotion(Timer);
 
 #[derive(Resource)]
-pub struct LiveRemanining(pub u32);
+pub struct LivesRemanining(pub u32);
 
 pub fn game_plugin(app: &mut App) {
     app.add_systems(OnEnter(GameState::Game), display_level)
@@ -35,7 +35,7 @@ fn display_level(
 ) {
     let level = levels.get(&loaded_level.level).unwrap();
 
-    commands.insert_resource(LiveRemanining(level.lives - 1));
+    commands.insert_resource(LivesRemanining(level.lives - 1));
 
     spawn_player(&mut commands, &game_assets, Vec2::ZERO);
 
@@ -57,7 +57,7 @@ fn display_level(
     {
         commands.spawn((
             Sprite::from_image(game_assets.asteroid.clone()),
-            Transform::from_xyz(300.0 * x, -200.0 * y, 0.0),
+            Transform::from_xyz(x, y, 0.0),
             RigidBody::Dynamic,
             Collider::circle(50.0),
             LinearVelocity(Vec2::from_angle(
@@ -139,13 +139,23 @@ fn collision(
 }
 
 fn tick_explotion(
-    mut explotions: Query<&mut Explotion>,
+    mut commands: Commands,
+
+    mut explotions: Query<(Entity, &mut Explotion, &Transform)>,
     time: Res<Time>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut lives_remaining: ResMut<LivesRemanining>,
+    game_assets: Res<GameAssets>,
 ) {
-    for mut timer in explotions.iter_mut() {
+    for (entity, mut timer, transform) in explotions.iter_mut() {
         if timer.0.tick(time.delta()).just_finished() {
-            next_state.set(GameState::StartMenu);
+            if lives_remaining.0 == 0 {
+                next_state.set(GameState::StartMenu);
+            } else {
+                commands.entity(entity).despawn();
+                lives_remaining.0 -= 1;
+                spawn_player(&mut commands, &game_assets, transform.translation.xy());
+            }
         }
     }
 }
