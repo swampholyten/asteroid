@@ -1,7 +1,11 @@
+use avian2d::{PhysicsPlugins, prelude::Gravity};
 use bevy::prelude::*;
 use game::game_plugin;
+use level::level_loader_plugin;
 use splash::splash_plugin;
 use start_menu::menu_plugin;
+
+use level::Level;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, States, Default)]
 enum GameState {
@@ -11,7 +15,21 @@ enum GameState {
     StartMenu,
 }
 
+#[derive(Resource)]
+struct GameAssets {
+    player_ship: Handle<Image>,
+    asteroid: Handle<Image>,
+    jets: Handle<Image>,
+    explotion: Handle<Image>,
+}
+
+#[derive(Resource)]
+pub struct LoadedLevel {
+    pub level: Handle<Level>,
+}
+
 mod game;
+mod level;
 mod splash;
 mod start_menu;
 
@@ -26,7 +44,8 @@ fn main() {
         }))
         .init_state::<GameState>()
         .enable_state_scoped_entities::<GameState>()
-        .add_plugins((splash_plugin, menu_plugin, game_plugin))
+        .add_plugins(PhysicsPlugins::default())
+        .insert_resource(Gravity::ZERO)
+        .add_plugins((splash_plugin, menu_plugin, game_plugin, level_loader_plugin))
         .run();
 }
-

@@ -1,7 +1,10 @@
 [package]
-name = "my_game"
+name = "asteroid"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 bevy = { version = "0.16.1", features = ["wayland"] }
+rand = "0.9.1"
+avian2d = "0.3.0"
+thiserror = "2.0.12"
