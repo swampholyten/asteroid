@@ -3,6 +3,12 @@ use avian2d::{
     prelude::{AngularDamping, AngularVelocity, Collider, Collisions, LinearVelocity, RigidBody},
 };
 use bevy::prelude::*;
+use bevy_enhanced_input::{
+    events::Fired,
+    input_action,
+    prelude::{Actions, InputAction, InputContext, InputContextAppExt},
+    preset::Bidirectional,
+};
 use rand::Rng;
 
 use crate::{GameAssets, GameState, LoadedLevel, level::Level};
@@ -19,11 +25,19 @@ struct Explotion(Timer);
 #[derive(Resource)]
 pub struct LivesRemanining(pub u32);
 
+#[derive(InputContext)]
+struct ShipController;
+
+#[derive(Debug, InputAction)]
+#[input_action(output = f32)]
+struct Rotate;
+
 pub fn game_plugin(app: &mut App) {
-    app.add_systems(OnEnter(GameState::Game), display_level)
+    app.add_input_context::<ShipController>()
+        .add_systems(OnEnter(GameState::Game), display_level)
         .add_systems(
             Update,
-            (control_player, collision, tick_explotion).run_if(in_state(GameState::Game)),
+            (collision, tick_explotion).run_if(in_state(GameState::Game)),
         );
 }
 
@@ -161,6 +175,13 @@ fn tick_explotion(
 }
 
 fn spawn_player(commands: &mut Commands, game_assets: &GameAssets, position: Vec2) {
+    let mut actions = Actions::<ShipController>::default();
+
+    actions.bind::<Rotate>().to(Bidirectional {
+        positive: KeyCode::KeyA,
+        negative: KeyCode::KeyD,
+    });
+
     commands.spawn((
         Sprite::from_image(game_assets.player_ship.clone()),
         RigidBody::Dynamic,
@@ -174,5 +195,21 @@ fn spawn_player(commands: &mut Commands, game_assets: &GameAssets, position: Vec
             Transform::from_xyz(0.0, -40.0, -1.0),
             Visibility::Hidden
         )],
+        actions,
     ));
+}
+
+fn rotate(
+    trigger: Trigger<Fired<Rotate>>,
+    mut player: Query<&mut AngularVelocity>,
+    time: Res<Time>,
+) -> Result {
+    let fixed_rotation_rate = 0.2;
+    let delta = time.delta().as_secs_f32();
+    let rate = fixed_rotation_rate / (1.0 / (60.0 * delta));
+    let mut angular_velocity = player.get_mut(trigger.target())?;
+
+    angular_velocity.0 += trigger.value.signum() * rate;
+
+    Ok(())
 }

@@ -8,3 +8,4 @@ bevy = { version = "0.16.1", features = ["wayland"] }
 rand = "0.9.1"
 avian2d = "0.3.0"
 thiserror = "2.0.12"
+bevy_enhanced_input = "0.12.0"

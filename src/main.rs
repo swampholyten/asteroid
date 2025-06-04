@@ -1,5 +1,6 @@
 use avian2d::{PhysicsPlugins, prelude::Gravity};
 use bevy::prelude::*;
+use bevy_enhanced_input::EnhancedInputPlugin;
 use game::game_plugin;
 use hud::hud_plugin;
 use level::level_loader_plugin;
@@ -46,7 +47,7 @@ fn main() {
         }))
         .init_state::<GameState>()
         .enable_state_scoped_entities::<GameState>()
-        .add_plugins(PhysicsPlugins::default())
+        .add_plugins((PhysicsPlugins::default(), EnhancedInputPlugin))
         .insert_resource(Gravity::ZERO)
         .add_plugins((
             splash_plugin,
