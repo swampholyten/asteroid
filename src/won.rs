@@ -4,7 +4,7 @@ use crate::GameState;
 
 pub fn won_plugin(app: &mut App) {
     app.add_systems(OnEnter(GameState::Won), display_title)
-        .add_systems(Update, start_game.run_if(in_state(GameState::Won)));
+        .add_systems(Update, back_to_menu.run_if(in_state(GameState::Won)));
 }
 
 fn display_title(mut commands: Commands) {
@@ -19,28 +19,28 @@ fn display_title(mut commands: Commands) {
         },
         children![
             (
-                Text::new("Asteroid"),
+                Text::new("You Won!"),
                 TextFont {
-                    font_size: 00.0,
+                    font_size: 200.0,
                     ..default()
                 },
-                TextColor::from(palettes::tailwind::RED_600)
+                TextColor::from(palettes::tailwind::GREEN_800)
             ),
             (
-                Text::new("Press any key to start"),
+                Text::new("Press any key to go back to the menu"),
                 TextFont {
-                    font_size: 70.0,
+                    font_size: 50.0,
                     ..default()
                 },
-                TextColor::from(palettes::tailwind::RED_800)
+                TextColor::from(palettes::tailwind::GREEN_600)
             )
         ],
-        StateScoped(GameState::StartMenu),
+        StateScoped(GameState::Won),
     ));
 }
 
-fn start_game(keyboard: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+fn back_to_menu(keyboard: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
     if keyboard.get_just_pressed().next().is_some() {
-        next.set(GameState::Game)
+        next.set(GameState::StartMenu)
     }
 }

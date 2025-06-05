@@ -1,14 +1,14 @@
+use std::time::Duration;
+
 use avian2d::{
     math::TAU,
-    prelude::{AngularDamping, AngularVelocity, Collider, Collisions, LinearVelocity, RigidBody},
+    prelude::{
+        AngularDamping, AngularVelocity, Collider, CollisionEventsEnabled, LinearVelocity,
+        OnCollisionStart, RigidBody,
+    },
 };
 use bevy::prelude::*;
-use bevy_enhanced_input::{
-    events::{Completed, Fired},
-    input_action,
-    prelude::{Actions, InputAction, InputContext, InputContextAppExt},
-    preset::Bidirectional,
-};
+use bevy_enhanced_input::prelude::*;
 use rand::Rng;
 
 use crate::{GameAssets, GameState, LoadedLevel, level::Level};
@@ -36,10 +36,18 @@ struct Rotate;
 #[input_action(output = bool)]
 struct Thrust;
 
+#[derive(Debug, InputAction)]
+#[input_action(output = bool)]
+struct FireLaser;
+
 pub fn game_plugin(app: &mut App) {
     app.add_input_context::<ShipController>()
         .add_systems(OnEnter(GameState::Game), display_level)
-        .add_systems(Update, (tick_explotion).run_if(in_state(GameState::Game)));
+        .add_systems(
+            Update,
+            (tick_explotion, has_won, laser_range, closest, follow_player)
+                .run_if(in_state(GameState::Game)),
+        );
 }
 
 fn display_level(
@@ -85,74 +93,6 @@ fn display_level(
     }
 }
 
-fn control_player(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player: Query<
-        (
-            &Transform,
-            &mut AngularVelocity,
-            &mut LinearVelocity,
-            &Children,
-        ),
-        With<Player>,
-    >,
-    time: Res<Time>,
-    mut visibility: Query<&mut Visibility>,
-) -> Result {
-    let Ok((player_transform, mut angular_velocity, mut linear_velocity, children)) =
-        player.single_mut()
-    else {
-        // No player at the moment, skip control logic
-        return Ok(());
-    };
-
-    let fixed_rotation_rate = 0.2;
-    let rotation_rate = fixed_rotation_rate / (1.0 / (60.0 * time.delta().as_secs_f32()));
-
-    if keyboard_input.pressed(KeyCode::KeyA) {
-        angular_velocity.0 += rotation_rate;
-    }
-    if keyboard_input.pressed(KeyCode::KeyD) {
-        angular_velocity.0 -= rotation_rate;
-    }
-    if keyboard_input.pressed(KeyCode::KeyW) {
-        let forward = player_transform.local_y();
-        linear_velocity.0 += forward.xy() * 2.0;
-        linear_velocity.0 = linear_velocity.0.clamp_length_max(300.0);
-        visibility
-            .get_mut(children[0])?
-            .set_if_neq(Visibility::Visible);
-    } else {
-        visibility
-            .get_mut(children[0])?
-            .set_if_neq(Visibility::Hidden);
-    }
-    Ok(())
-}
-
-fn collision(
-    collisions: Collisions,
-    player: Query<(&Transform, Entity), With<Player>>,
-    mut commands: Commands,
-    game_assets: Res<GameAssets>,
-) -> Result {
-    let Ok((transform, entity)) = player.single() else {
-        return Ok(());
-    };
-
-    if collisions.collisions_with(entity).next().is_some() {
-        commands.spawn((
-            Sprite::from_image(game_assets.explotion.clone()),
-            (*transform).with_scale(Vec3::splat(0.2)),
-            Explotion(Timer::from_seconds(1.0, TimerMode::Once)),
-            StateScoped(GameState::Game),
-        ));
-        commands.entity(entity).despawn();
-    }
-
-    Ok(())
-}
-
 fn tick_explotion(
     mut commands: Commands,
 
@@ -183,6 +123,9 @@ fn spawn_player(commands: &mut Commands, game_assets: &GameAssets, position: Vec
         negative: KeyCode::KeyD,
     });
 
+    actions.bind::<Thrust>().to(KeyCode::KeyW);
+    actions.bind::<FireLaser>().to(KeyCode::Space);
+
     commands
         .spawn((
             Sprite::from_image(game_assets.player_ship.clone()),
@@ -201,7 +144,9 @@ fn spawn_player(commands: &mut Commands, game_assets: &GameAssets, position: Vec
         ))
         .observe(rotate)
         .observe(thrust)
-        .observe(thrust_stop);
+        .observe(thrust_stop)
+        .observe(fire_laser)
+        .observe(asteroid_collision);
 }
 
 fn rotate(
@@ -247,4 +192,139 @@ fn thrust_stop(
         .set_if_neq(Visibility::Hidden);
 
     Ok(())
+}
+
+fn asteroid_collision(
+    collision: Trigger<OnCollisionStart>,
+    is_asteroid: Query<(), With<Asteroid>>,
+    player: Query<&Transform>,
+    mut commands: Commands,
+    game_assets: Res<GameAssets>,
+) -> Result {
+    if is_asteroid.get(collision.collider).is_ok() {
+        let transform = player.get(collision.target())?;
+        commands.spawn((
+            Sprite::from_image(game_assets.explotion.clone()),
+            (*transform).with_scale(Vec3::splat(0.2)),
+            Explotion(Timer::from_seconds(1.0, TimerMode::Once)),
+            StateScoped(GameState::Game),
+        ));
+        commands.entity(collision.target()).despawn();
+        commands.entity(collision.collider).despawn();
+    }
+    Ok(())
+}
+
+#[derive(Component)]
+struct Laser(Timer);
+
+fn fire_laser(
+    trigger: Trigger<Fired<FireLaser>>,
+    player: Query<&Transform>,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut last_fired: Local<Duration>,
+    game_assets: Res<GameAssets>,
+) -> Result {
+    let mut transform = *player.get(trigger.target())?;
+    transform.translation += transform.local_y() * 40.0;
+    transform.scale = Vec3::ONE / 2.0;
+
+    if time.elapsed() > *last_fired + Duration::from_secs_f32(0.5) {
+        commands
+            .spawn((
+                Sprite::from_image(game_assets.laser.clone()),
+                transform,
+                RigidBody::Dynamic,
+                Collider::rectangle(4.0, 15.0),
+                LinearVelocity(transform.local_y().xy() * 1000.0),
+                Laser(Timer::from_seconds(1.0, TimerMode::Once)),
+                CollisionEventsEnabled,
+                StateScoped(GameState::Game),
+            ))
+            .observe(laser_attack);
+
+        *last_fired = time.elapsed();
+    }
+
+    Ok(())
+}
+
+fn laser_attack(
+    collision: Trigger<OnCollisionStart>,
+    is_asteroid: Query<(), With<Asteroid>>,
+    mut commands: Commands,
+) {
+    if is_asteroid.get(collision.collider).is_ok() {
+        commands.entity(collision.collider).despawn();
+        commands.entity(collision.target()).despawn();
+    }
+}
+
+fn has_won(asteroids: Query<(), With<Asteroid>>, mut next_state: ResMut<NextState<GameState>>) {
+    if asteroids.is_empty() {
+        next_state.set(GameState::Won);
+    }
+}
+
+fn laser_range(mut commands: Commands, mut lasers: Query<(Entity, &mut Laser)>, time: Res<Time>) {
+    for (entity, mut laser) in lasers.iter_mut() {
+        if laser.0.tick(time.delta()).just_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn follow_player(
+    player: Query<&Transform, With<Player>>,
+    mut camera: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
+) {
+    let Ok(player_transform) = player.single() else {
+        return;
+    };
+
+    let Ok(mut camera_transform) = camera.single_mut() else {
+        return;
+    };
+    camera_transform.translation = player_transform.translation;
+}
+
+fn closest(
+    asteroids: Query<(Entity, &Transform), With<Asteroid>>,
+    player: Query<&Transform, With<Player>>,
+    mut gizmos: Gizmos,
+    mut commands: Commands,
+) {
+    let Ok(player_transform) = player.single() else {
+        return;
+    };
+
+    let player_position = player_transform.translation.xy();
+    let Some((entity, nearest)) = asteroids.iter().reduce(|a, b| {
+        if a.1.translation.xy().distance_squared(player_position)
+            < b.1.translation.xy().distance_squared(player_position)
+        {
+            a
+        } else {
+            b
+        }
+    }) else {
+        return;
+    };
+
+    let nearest_position = nearest.translation.xy();
+    let distance = nearest_position - player_position;
+
+    let direction = distance.normalize();
+    if distance.length() > 1000.0 {
+        commands
+            .entity(entity)
+            .insert(LinearVelocity(direction.normalize() * -100.0));
+    }
+
+    gizmos.arrow_2d(
+        player_position + direction * 45.0,
+        player_position + direction * 70.0,
+        Color::hsl(0.0, 1.0, 0.5),
+    );
 }

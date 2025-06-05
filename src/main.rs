@@ -8,6 +8,7 @@ use splash::splash_plugin;
 use start_menu::menu_plugin;
 
 use level::Level;
+use won::won_plugin;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, States, Default)]
 enum GameState {
@@ -24,6 +25,7 @@ struct GameAssets {
     asteroid: Handle<Image>,
     jets: Handle<Image>,
     explotion: Handle<Image>,
+    laser: Handle<Image>,
 }
 
 #[derive(Resource)]
@@ -57,6 +59,7 @@ fn main() {
             game_plugin,
             level_loader_plugin,
             hud_plugin,
+            won_plugin,
         ))
         .run();
 }

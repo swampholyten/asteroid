@@ -21,7 +21,7 @@ fn display_title(mut commands: Commands) {
             (
                 Text::new("Asteroid"),
                 TextFont {
-                    font_size: 00.0,
+                    font_size: 200.0,
                     ..default()
                 },
                 TextColor::from(palettes::tailwind::RED_600)
